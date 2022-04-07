@@ -21,6 +21,8 @@
   <xacro:property name="front_wheel_y_offset" value="0.070"/>
   <xacro:property name="front_wheel_z_offset" value="-0.03"/>
   
+  <xacro:property name="front_wheel_mass" value="0.5"/>
+  
 
   <!-- Rear wheel is a caster wheel but we represent it with a 
        sphere -->
@@ -32,24 +34,11 @@
   <xacro:property name="rear_wheel_arm" value="0.02"/>
   <xacro:property name="rear_wheel_y_offset" value="0.0"/>
   <xacro:property name="rear_wheel_z_offset" value="-0.035"/>
+  
+  <xacro:property name="rear_wheel_mass" value="0.5"/>
 
   <!-- Plugin Variables-->  
   <xacro:property name="wheel_separation" value="0.138"/>
-
-  
-  <!--Color Properties-->
-  <material name="blue">
-    <color rgba="0 0 0.8 1"/>
-  </material>
-  <material name="black">
-    <color rgba="0 0 0 1"/>
-  </material>
-  <material name="white">
-    <color rgba="1 1 1 1"/>
-  </material>
-  <material name="red">
-    <color rgba="0.8 0.0 0.0 1.0"/>
-  </material>
 
   <!--Interial macros-->
   <xacro:macro name="cylinder_inertia" params="m r h">
@@ -84,13 +73,13 @@
   <link name="base_link">
     <origin xyz="0 0 0" rpy="0 0 0" />
     <xacro:box_inertia m="0.01" w="${base_len}" h="${base_width}" d="${base_depth}"/>
-    <visual>
+    <!-- <visual>
 
       <origin xyz="-0.03 0 0.03" rpy="-1.57 0 -1.57"/>
       <geometry>
         <mesh filename="file:///$(find crawler_description)/meshes/Altiscan2t_no_wheels.dae"/>
       </geometry>
-    </visual>
+    </visual> -->
     <collision>
       <geometry>
         <box size="${base_len} ${base_width} ${base_depth}"/>
@@ -128,7 +117,7 @@
           </ode>
         </friction>
       </surface>
-      <xacro:cylinder_inertia m=".5" r="${front_wheel_radius}" h="${front_wheel_length}"/>
+      <xacro:cylinder_inertia m="${front_wheel_mass}" r="${front_wheel_radius}" h="${front_wheel_length}"/>
     </link>
 
     <joint name="${prefix}_front_wheel_joint" type="continuous">
@@ -162,7 +151,7 @@
     <axis xyz="0 1 0" rpy="0 0 0"/>
     <parent link="caster_wheel_base"/>
     <child link="caster_wheel"/>
-    <origin xyz="${rear_wheel_arm} 0 ${rear_wheel_z_offset}" rpy="0 0 0"/>
+    <origin xyz="${-rear_wheel_arm} 0 ${rear_wheel_z_offset}" rpy="0 0 0"/>
   </joint>
   
   <link name="caster_wheel">
@@ -186,15 +175,7 @@
         </ode>
       </friction>
     </surface>
-    <xacro:cylinder_inertia m="0.5" r="${rear_wheel_radius}" h="${rear_wheel_width}"/>
+    <xacro:cylinder_inertia m="${rear_wheel_mass}" r="${rear_wheel_radius}" h="${rear_wheel_width}"/>
   </link>
-
-
-  <xacro:property name="imu_size_x" value="0.003"/>
-  <xacro:property name="imu_size_y" value="0.003"/>
-  <xacro:property name="imu_size_z" value="0.001"/>
-  <xacro:property name="imu_origin_x" value="-0.10"/>
-  <xacro:property name="imu_origin_y" value="-0.15"/>
-  <xacro:property name="imu_origin_z" value="0.00"/>
 
 </robot>
