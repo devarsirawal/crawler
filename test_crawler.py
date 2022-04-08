@@ -1,3 +1,4 @@
+from asyncio.log import logger
 from isaacgym import gymutil
 from isaacgym import gymapi
 from isaacgym import gymtorch
@@ -16,10 +17,13 @@ custom_parameters = [
         {"name": "--use_sphere", "action": "store_true", "default": False, "help": "Use crawler model with a sphere as the caster wheel instead of swivel mechanism"},
         {"name": "--use_capsule", "action": "store_true", "default": True, "help": "Replace cylinders with capsules"},
         {"name": "--damping", "type": float, "default": 1.0e8, "help": "Set the damping of the front left/right wheels"},
+        {"name": "--stiffness", "type": float, "default": 1.0e4, "help": "Set the stiffness of the front left/right wheels"},
         {"name": "--local", "action": "store_true", "default": False, "help": "Apply force of magnetism in local frame (otherwise env frame)"},
         {"name": "--force", "type": float, "default": 400., "help": "Apply acceleration for force of magnetism (N/m)"},
         {"name": "--velocity", "type": float, "default": 2., "help": "Apply velocity to front left/right wheels (rad/s)"},
-        {"name": "--max_plot_time", "type": int, "default": 200, "help": "Iterations to plot"}
+        {"name": "--max_plot_time", "type": int, "default": 200, "help": "Iterations to plot"},
+        {"name": "--use_torque", "action": "store_true", "default": False, "help": "Apply effort to DOFs (otherwise velocity)"},
+        {"name": "--torque", "type": float, "default": 2., "help": "Apply torque to front left/right wheels (Nm)"}
 ]
 
 # parse arguments
@@ -141,11 +145,14 @@ for i in range(num_envs):
     props = gym.get_actor_dof_properties(env, ahandle)
     
     props["driveMode"].fill(gymapi.DOF_MODE_NONE)
-    props["driveMode"][fl_id] = gymapi.DOF_MODE_VEL
-    props["driveMode"][fr_id] = gymapi.DOF_MODE_VEL
+    props["driveMode"][fl_id] = gymapi.DOF_MODE_EFFORT if args.use_torque else gymapi.DOF_MODE_VEL
+    props["driveMode"][fr_id] = gymapi.DOF_MODE_EFFORT if args.use_torque else gymapi.DOF_MODE_VEL
     
+    # set stiffness on FL and FR wheels
     # stiffness not needed for velocity drive mode
     props["stiffness"].fill(0.0)
+    props["stiffness"][fl_id] = 100
+    props["stiffness"][fr_id] = 100
 
     # set damping on FL and FR wheels for PD controller (tunable)
     props["damping"][fl_id] = args.damping
@@ -182,11 +189,25 @@ frame_count = 0
 is_local = args.local
 magnet_force = -args.force
 velocity = args.velocity
+torque = -args.torque
 force_direction = 2 # z-axis
 
 # Init graph plotter
-plotter = Plotter(1, args.force, args.velocity)
-stop_state_log = 100
+plot_params = {
+    "Vertical": args.vertical,
+    "Sphere": args.use_sphere,
+    "Capsule": args.use_capsule,
+    "Damping": args.damping,
+    "Stiffness": args.stiffness,
+    "Local": args.local,
+    "Force": args.force
+}
+if args.use_torque:
+    plot_params["Torque"] = args.torque
+else:
+    plot_params["Velocity"] = args.velocity
+
+plotter = Plotter(1, plot_params)
 robot_index = 0
 
 while not gym.query_viewer_has_closed(viewer):
@@ -208,19 +229,25 @@ while not gym.query_viewer_has_closed(viewer):
     forces[:, RF_WHEEL_ID, force_direction] = magnet_force
     forces[:, C_WHEEL_ID, force_direction] = magnet_force
 
-    # print(force_positions)
     gym.apply_rigid_body_force_at_pos_tensors(sim, gymtorch.unwrap_tensor(forces), gymtorch.unwrap_tensor(force_positions), force_space)
    
     # get total number of DOFs
     num_dofs = gym.get_sim_dof_count(sim)
     # apply velocity to each wheel (rad/s)
-    velocities = torch.zeros(num_dofs, dtype=torch.float32, device=device)
-    velocities[fl_id] = velocity
-    velocities[fr_id] = velocity
+    actions = torch.zeros(num_dofs, dtype=torch.float32, device=device)
+
+
+    actions[fl_id] = torque if args.use_torque else velocity
+    actions[fr_id] = torque if args.use_torque else velocity
+
 
     # apply velocity after 50 frames, allows robot to settle from inital pose
-    if frame_count == 50:
-        gym.set_dof_velocity_target_tensor(sim, gymtorch.unwrap_tensor(velocities))
+    if args.use_torque:
+        if frame_count >= 50:
+            gym.set_dof_actuation_force_tensor(sim, gymtorch.unwrap_tensor(actions))
+    else:
+        if frame_count == 50:
+            gym.set_dof_velocity_target_tensor(sim, gymtorch.unwrap_tensor(actions))
 
     gym.refresh_force_sensor_tensor(sim)
     gym.refresh_actor_root_state_tensor(sim)
@@ -249,10 +276,16 @@ while not gym.query_viewer_has_closed(viewer):
                 'x_pos': root_positions[robot_index, 0].item(),
                 'y_pos': root_positions[robot_index, 1].item(),
                 'lf_track_vel': dof_states[fl_id, 1].item(),
-                'lf_cmd_vel': velocity,
                 'rf_track_vel': dof_states[fr_id, 1].item(),
-                'rf_cmd_vel': velocity
+                'lf_track_torque': fsdata[sensor_lf, 4].item(),
+                'rf_track_torque': fsdata[sensor_rf, 4].item(),
             }
+        if args.use_torque:
+            logger_vars["lf_cmd_torque"] = -torque
+            logger_vars["rf_cmd_torque"] = -torque
+        else:
+            logger_vars["lf_cmd_vel"] = velocity
+            logger_vars["rf_cmd_vel"] = velocity
         plotter.log_states(logger_vars)
     elif frame_count == args.max_plot_time + 50:
         plotter.plot_states()

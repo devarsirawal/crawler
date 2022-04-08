@@ -39,12 +39,11 @@ from multiprocessing import Process
 # - 
 
 class Plotter:
-    def __init__(self, dt, force, vel):
+    def __init__(self, dt, params):
         self.state_log = defaultdict(list)
         self.rew_log = defaultdict(list)
         self.dt = dt
-        self.force = force
-        self.velocity = vel
+        self.params = params
         self.plot_process = None
 
     def log_state(self, key, value):
@@ -63,29 +62,43 @@ class Plotter:
         self.plot_process.start()
 
     def _plot(self):
-        nb_rows = 1
+        nb_rows = 2
         nb_cols = 3
         fig, axs = plt.subplots(nb_rows, nb_cols)
         for key, value in self.state_log.items():
             time = np.linspace(0, len(value)*self.dt, len(value))
             break
         log= self.state_log
+
+        fig.suptitle(f"{self.params}", fontsize=14)
         # plot joint targets and measured positions
-        a = axs[0]
+        a = axs[0,0]
         if log["x_pos"] and log["y_pos"]: a.plot(log["x_pos"], log["y_pos"], label='path')
-        a.set(xlabel='x', ylabel='y', title=f'Crawler Path (Force: {self.force}, Vel: {self.velocity})')
+        a.set(xlabel='x', ylabel='y', title=f'Crawler Path')
         a.legend()
-        # plot joint velocity
-        a = axs[1]
+        # plot left front wheel velocity
+        a = axs[0,1]
         if log["lf_track_vel"]: a.plot(time, log["lf_track_vel"], label='measured')
         if log["lf_cmd_vel"]: a.plot(time, log["lf_cmd_vel"], label='target')
         a.set(xlabel='time [frames]', ylabel=' Angular Velocity [rad/s]', title='Left Front Wheel')
         a.legend()
-        # plot base vel x
-        a = axs[2]
+        # plot right front wheel velocity
+        a = axs[0,2]
         if log["rf_track_vel"]: a.plot(time, log["rf_track_vel"], label='measured')
         if log["rf_cmd_vel"]: a.plot(time, log["rf_cmd_vel"], label='target')
         a.set(xlabel='time [frames]', ylabel=' Angular Velocity [rad/s]', title='Right Front Wheel')
+        a.legend()
+        # plot left front wheel torque
+        a = axs[1,0]
+        if log["lf_track_torque"]: a.plot(time, log["lf_track_torque"], label='measured')
+        if log["lf_cmd_torque"]: a.plot(time, log["lf_cmd_torque"], label='target')
+        a.set(xlabel='time [frames]', ylabel=' Torque [Nm]', title='Left Front Wheel')
+        a.legend()
+        # plot right front wheel torque
+        a = axs[1,1]
+        if log["rf_track_torque"]: a.plot(time, log["rf_track_torque"], label='measured')
+        if log["rf_cmd_torque"]: a.plot(time, log["rf_cmd_torque"], label='target')
+        a.set(xlabel='time [frames]', ylabel=' Torque [Nm]', title='Right Front Wheel')
         a.legend()
         plt.show()
     
