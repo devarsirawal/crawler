@@ -243,6 +243,7 @@ while not gym.query_viewer_has_closed(viewer):
 
     frame_count += 1
 
+    # only graph after robot has spawned & settled
     if 50 < frame_count < args.max_plot_time + 50:
         logger_vars = {
                 'x_pos': root_positions[robot_index, 0].item(),
