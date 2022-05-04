@@ -81,21 +81,23 @@ class Plotter:
         if log["lf_track_vel"]: a.plot(time, log["lf_track_vel"], label='measured')
         if log["lf_cmd_vel"]: a.plot(time, log["lf_cmd_vel"], label='target')
         a.set(xlabel='time [frames]', ylabel=' Angular Velocity [rad/s]', title='Left Front Wheel')
+        a.set_ylim([0, 2])
         a.legend()
         # plot right front wheel velocity
         a = axs[0,2]
         if log["rf_track_vel"]: a.plot(time, log["rf_track_vel"], label='measured')
         if log["rf_cmd_vel"]: a.plot(time, log["rf_cmd_vel"], label='target')
         a.set(xlabel='time [frames]', ylabel=' Angular Velocity [rad/s]', title='Right Front Wheel')
+        a.set_ylim([0, 2])
         a.legend()
         # plot left front wheel torque
-        a = axs[1,0]
+        a = axs[1,1]
         if log["lf_track_torque"]: a.plot(time, log["lf_track_torque"], label='measured')
         if log["lf_cmd_torque"]: a.plot(time, log["lf_cmd_torque"], label='target')
         a.set(xlabel='time [frames]', ylabel=' Torque [Nm]', title='Left Front Wheel')
         a.legend()
         # plot right front wheel torque
-        a = axs[1,1]
+        a = axs[1,2]
         if log["rf_track_torque"]: a.plot(time, log["rf_track_torque"], label='measured')
         if log["rf_cmd_torque"]: a.plot(time, log["rf_cmd_torque"], label='target')
         a.set(xlabel='time [frames]', ylabel=' Torque [Nm]', title='Right Front Wheel')

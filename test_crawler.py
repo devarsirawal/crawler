@@ -18,7 +18,9 @@ custom_parameters = [
         {"name": "--use_capsule", "action": "store_true", "default": True, "help": "Replace cylinders with capsules"},
         {"name": "--damping", "type": float, "default": 1.0e8, "help": "Set the damping of the front left/right wheels"},
         {"name": "--stiffness", "type": float, "default": 1.0e4, "help": "Set the stiffness of the front left/right wheels"},
+        {"name": "--friction", "type": float, "default": 1., "help": "Set the friction of the front left/right wheels"},
         {"name": "--local", "action": "store_true", "default": False, "help": "Apply force of magnetism in local frame (otherwise env frame)"},
+        {"name": "--fix_base", "action": "store_true", "default": False, "help": "Fix base link of robot"},
         {"name": "--force", "type": float, "default": 400., "help": "Apply acceleration for force of magnetism (N/m)"},
         {"name": "--velocity", "type": float, "default": 2., "help": "Apply velocity to front left/right wheels (rad/s)"},
         {"name": "--max_plot_time", "type": int, "default": 200, "help": "Iterations to plot"},
@@ -88,8 +90,8 @@ asset_file = f"urdf/crawler_{'sphere' if args.use_sphere else 'caster'}.urdf"
 
 asset_options = gymapi.AssetOptions()
 asset_options.replace_cylinder_with_capsule = args.use_capsule
-
-
+asset_options.fix_base_link = args.fix_base 
+# asset_options.slices_per_cylinder = 20
 asset = gym.load_asset(sim, asset_root, asset_file, asset_options)
 
 print("== BODY INFORMATION ==")
@@ -151,15 +153,26 @@ for i in range(num_envs):
     # set stiffness on FL and FR wheels
     # stiffness not needed for velocity drive mode
     props["stiffness"].fill(0.0)
-    props["stiffness"][fl_id] = 100
-    props["stiffness"][fr_id] = 100
+    props["stiffness"][fl_id] = args.stiffness
+    props["stiffness"][fr_id] = args.stiffness
 
     # set damping on FL and FR wheels for PD controller (tunable)
     props["damping"][fl_id] = args.damping
     props["damping"][fr_id] = args.damping
 
+    props["friction"][fl_id] = args.friction
+    props["friction"][fr_id] = args.friction
 
     gym.set_actor_dof_properties(env, ahandle, props)
+
+    # rigid_props = gym.get_actor_rigid_shape_properties(env, ahandle)
+    # rigid_props[fl_id].friction = 100
+    # rigid_props[fr_id].friction = 100
+
+    # rigid_props[fl_id].rolling_friction = 100
+    # rigid_props[fr_id].rolling_friction = 100
+    # gym.set_actor_rigid_shape_properties(env, ahandle, rigid_props)
+
 
     # enable force sensor for actor
     gym.enable_actor_dof_force_sensors(env, ahandle)
@@ -168,6 +181,7 @@ for i in range(num_envs):
 gym.viewer_camera_look_at(viewer, None, gymapi.Vec3(3, 3, 3), gymapi.Vec3(0, 0, 0))
 
 gym.prepare_sim(sim)
+
 
 rb_tensor = gym.acquire_rigid_body_state_tensor(sim)
 rb_states = gymtorch.wrap_tensor(rb_tensor)
@@ -181,6 +195,7 @@ _root_tensor = gym.acquire_actor_root_state_tensor(sim)
 # wrap it in a PyTorch Tensor and create convenient views
 root_tensor = gymtorch.wrap_tensor(_root_tensor)
 root_positions = root_tensor[:, 0:3]
+root_velocities = root_tensor[:, 7:]
 
 _dof_states = gym.acquire_dof_state_tensor(sim)
 dof_states = gymtorch.wrap_tensor(_dof_states)
@@ -189,7 +204,7 @@ frame_count = 0
 is_local = args.local
 magnet_force = -args.force
 velocity = args.velocity
-torque = -args.torque
+torque = args.torque
 force_direction = 2 # z-axis
 
 # Init graph plotter
@@ -246,15 +261,18 @@ while not gym.query_viewer_has_closed(viewer):
         if frame_count >= 50:
             gym.set_dof_actuation_force_tensor(sim, gymtorch.unwrap_tensor(actions))
     else:
-        if frame_count == 50:
+        if frame_count >= 50:
             gym.set_dof_velocity_target_tensor(sim, gymtorch.unwrap_tensor(actions))
 
     gym.refresh_force_sensor_tensor(sim)
     gym.refresh_actor_root_state_tensor(sim)
-    gym.refresh_dof_state_tensor(sim)
+    
     # print(fsdata)
     # print(dof_states)
     # print(root_positions)
+    # print(root_velocities)
+
+    gym.draw_env_rigid_contacts(viewer, env, gymapi.Vec3(1, 0, 0), 1, False)
 
     # step the physics
     gym.simulate(sim)
@@ -277,12 +295,12 @@ while not gym.query_viewer_has_closed(viewer):
                 'y_pos': root_positions[robot_index, 1].item(),
                 'lf_track_vel': dof_states[fl_id, 1].item(),
                 'rf_track_vel': dof_states[fr_id, 1].item(),
-                'lf_track_torque': fsdata[sensor_lf, 4].item(),
-                'rf_track_torque': fsdata[sensor_rf, 4].item(),
+                'lf_track_torque': -fsdata[sensor_lf, 4].item(),
+                'rf_track_torque': -fsdata[sensor_rf, 4].item(),
             }
         if args.use_torque:
-            logger_vars["lf_cmd_torque"] = -torque
-            logger_vars["rf_cmd_torque"] = -torque
+            logger_vars["lf_cmd_torque"] = torque
+            logger_vars["rf_cmd_torque"] = torque
         else:
             logger_vars["lf_cmd_vel"] = velocity
             logger_vars["rf_cmd_vel"] = velocity
